@@ -1,0 +1,65 @@
+# Python Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment Variables
+.env
+*.env
+
+# Django Stuff
+db.sqlite3
+*.log
+media/
+staticfiles/
+static/
+
+# Migrations
+**/migrations/
+
+# Cache files
+*.cache
+*.mo
+*.pot
+
+# Pytest
+.coverage
+.cache
+*.cover
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# IDE Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*.swn2
+*.bak
+
+# Virtual Environment
+venv/
+env/
+ENV/
+build/
+
+# Secrets
+*.pem
+*.key
+
+# Node Modules (if using JavaScript frontend in your project)
+node_modules/
+
+# OS-Specific Files
+.DS_Store
+Thumbs.db
+
+# Coverage Reports
+htmlcov/
+*.cover
+*.py,cover
+.coverage
