@@ -229,74 +229,102 @@ class CartAPIView(APIView):
         cart = get_object_or_404(Cart, user=request.user)
         cart.items.all().delete()
         return Response({"message": "Cart cleared successfully"}, status=status.HTTP_204_NO_CONTENT)
+    
+
+    
 
 class AddToCartAPIView(APIView):
     permission_classes = [IsAuthenticated]
-    
+
+
+
     def post(self, request):
         product_id = request.data.get("product_id")
         quantity = request.data.get("quantity", 1)
         size = request.data.get("size")
-        
+
         try:
             product = Product.objects.get(id=product_id)
         except Product.DoesNotExist:
             return Response({"error": "Product matching query does not exist."}, status=status.HTTP_404_NOT_FOUND)
-        
-        # Validate size
-        if size and size not in dict(Product.SIZE_CHOICES).keys():
-            return Response({"error": "Invalid size selected."}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Check stock availability
-        if product.quantity < quantity:
-            return Response({"error": "Not enough stock available for this product."}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # Get or create cart for user
         cart, _ = Cart.objects.get_or_create(user=request.user)
-        
-        # Add product to cart
-        cart.add_product(product, quantity, size)
-        
+
+        try:
+            # Use the existing add_product method from the Cart model
+            cart.add_product(product, quantity, size)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
         # Serialize and return updated cart
         serializer = CartSerializer(cart)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
-    
+
     def patch(self, request):
         product_id = request.data.get("product_id")
         quantity = request.data.get("quantity")
-        size = request.data.get("size") 
-        
+        size = request.data.get("size")
+
         cart = Cart.objects.filter(user=request.user).first()
-        
         if not cart:
             return Response({"detail": "Cart not found"}, status=status.HTTP_404_NOT_FOUND)
-        
-        # Find cart item with specific product and size
-        if size:
-            cart_item = cart.items.filter(product_id=product_id, size=size).first()
-        else:
-            cart_item = cart.items.filter(product_id=product_id).first()
-        
+
+        cart_item = cart.items.filter(product_id=product_id, product_size__size=size if size else None).first()
         if not cart_item:
             return Response({"detail": "Item not found in cart"}, status=status.HTTP_404_NOT_FOUND)
-        
-        product = cart_item.product
-        available_quantity = product.quantity
-        
-        if quantity > available_quantity:
-            return Response({
-                "detail": f"Requested quantity exceeds available stock. Only {available_quantity} items available."
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         if quantity == 0:
             cart_item.delete()
         else:
+            if cart_item.product.product_type == 'sized':
+                product_size = cart_item.product_size
+                if product_size.quantity < quantity:
+                    return Response({"detail": f"Not enough stock for size {size}. Available: {product_size.quantity}"}, status=status.HTTP_400_BAD_REQUEST)
+            elif cart_item.product.quantity < quantity:
+                return Response({"detail": "Not enough stock available!"}, status=status.HTTP_400_BAD_REQUEST)
+
             cart_item.quantity = quantity
             cart_item.save()
-        
-        # Serialize and return the updated cart data
+
         serializer = CartSerializer(cart)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+    # def patch(self, request):
+    #     product_id = request.data.get("product_id")
+    #     quantity = request.data.get("quantity")
+    #     size = request.data.get("size")
+
+    #     cart = Cart.objects.filter(user=request.user).first()
+    #     if not cart:
+    #         return Response({"detail": "Cart not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    #     # Find cart item with specific product and size
+    #     if size:
+    #         cart_item = cart.items.filter(product_id=product_id, product_size__size=size).first()
+    #     else:
+    #         cart_item = cart.items.filter(product_id=product_id, product_size__isnull=True).first()
+
+    #     if not cart_item:
+    #         return Response({"detail": "Item not found in cart"}, status=status.HTTP_404_NOT_FOUND)
+
+    #     try:
+    #         # Check stock availability and update
+    #         if quantity == 0:
+    #             cart_item.delete()
+    #         else:
+    #             # Reuse the add_product method for validation
+    #             cart.add_product(cart_item.product, quantity - cart_item.quantity, size)
+    #             cart_item.quantity = quantity
+    #             cart_item.save()
+    #     except ValueError as e:
+    #         return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    #     # Serialize and return the updated cart data
+    #     serializer = CartSerializer(cart)
+    #     return Response(serializer.data, status=status.HTTP_200_OK)
+
 
 
 class RemoveFromCartAPIView(APIView):

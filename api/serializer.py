@@ -1,9 +1,8 @@
 from rest_framework import serializers
-from .models import User,Category,Product,CartItem,Cart
+from .models import User,Category,Product,CartItem,Cart,ProductSize
 from django.contrib.auth.password_validation import validate_password,ValidationError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import AccessToken,RefreshToken
-from .models import User
 
 
 
@@ -61,12 +60,33 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 
+class ProductSizeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductSize
+        fields = [ 'size', 'quantity']
+
 class ProductSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
+    sizes = ProductSizeSerializer(many=True,required=False)
+
     class Meta:
         model = Product
         fields = '__all__'
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def create(self, validated_data):
+        # Extract sizes data if provided
+        sizes_data = validated_data.pop('sizes', None)
+        product = Product.objects.create(**validated_data)
+
+        # Handle sizes for sized products
+        if validated_data.get('product_type') == 'sized' and sizes_data:
+            for size_data in sizes_data:
+                ProductSize.objects.create(product=product, **size_data)
+        elif validated_data.get('product_type') == 'sized' and not sizes_data:
+            raise serializers.ValidationError({"sizes": "This field is required for sized products."})
+
+        return product
 
 
 
@@ -78,10 +98,11 @@ class CartItemSerializer(serializers.ModelSerializer):
     price = serializers.CharField(source='product.price',read_only=True) 
     discounted_price = serializers.CharField(source='product.discounted_price',read_only=True) 
     slug = serializers.SlugField(source="product.slug", read_only=True)
+    product_size = serializers.CharField(source='product_size.size', read_only=True)
 
     class Meta:
         model = CartItem
-        fields = ['id', 'product_name', 'product_id','product_image','discounted_price', 'quantity','price', 'get_total_price','size','slug']
+        fields = ['id', 'product_name', 'product_id','product_image','discounted_price', 'quantity','price', 'get_total_price','product_size','slug']
 
 
 
