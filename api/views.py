@@ -802,7 +802,7 @@ class MonthlyOrdersAPIView(APIView):
 
 
 class ProductReviewApiView(APIView):
-    permission_classes = [IsAuthenticatedOrReadOnly]
+    permission_classes = [IsAuthenticated]
 
     def get_object(self, product_id):
         return get_object_or_404(Product, pk=product_id)
