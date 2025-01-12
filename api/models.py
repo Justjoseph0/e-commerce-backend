@@ -2,8 +2,8 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils.translation import gettext_lazy as _
 from autoslug import AutoSlugField
-from django.core.exceptions import ObjectDoesNotExist
 from django.core.validators import FileExtensionValidator
+from django.utils.timezone import now
 
 
 
@@ -11,9 +11,84 @@ from django.core.validators import FileExtensionValidator
 # user
 class User(AbstractUser):
     email = models.EmailField(unique=True)
-    phone_number = models.CharField(max_length=100, blank=True)
-    address = models.CharField(max_length=200, blank=True)
     is_admin = models.BooleanField(default=False)
+
+
+class UserAddress(models.Model):
+    COUNTRY_CHOICES = [
+        ('Nigeria', 'Nigeria'),
+    ]
+
+    ADDRESS_TYPE_CHOICES = [
+        ('home', 'Home'),
+        ('office', 'Office')
+    ]
+
+    STATE_CHOICES = [
+        ('Abia', 'Abia'),
+        ('Adamawa', 'Adamawa'),
+        ('Akwa Ibom', 'Akwa Ibom'),
+        ('Anambra', 'Anambra'),
+        ('Bauchi', 'Bauchi'),
+        ('Bayelsa', 'Bayelsa'),
+        ('Benue', 'Benue'),
+        ('Borno', 'Borno'),
+        ('Cross River', 'Cross River'),
+        ('Delta', 'Delta'),
+        ('Ebonyi', 'Ebonyi'),
+        ('Edo', 'Edo'),
+        ('Ekiti', 'Ekiti'),
+        ('Enugu', 'Enugu'),
+        ('Gombe', 'Gombe'),
+        ('Imo', 'Imo'),
+        ('Jigawa', 'Jigawa'),
+        ('Kaduna', 'Kaduna'),
+        ('Kano', 'Kano'),
+        ('Katsina', 'Katsina'),
+        ('Kebbi', 'Kebbi'),
+        ('Kogi', 'Kogi'),
+        ('Kwara', 'Kwara'),
+        ('Lagos', 'Lagos'),
+        ('Nasarawa', 'Nasarawa'),
+        ('Niger', 'Niger'),
+        ('Ogun', 'Ogun'),
+        ('Ondo', 'Ondo'),
+        ('Osun', 'Osun'),
+        ('Oyo', 'Oyo'),
+        ('Plateau', 'Plateau'),
+        ('Rivers', 'Rivers'),
+        ('Sokoto', 'Sokoto'),
+        ('Taraba', 'Taraba'),
+        ('Yobe', 'Yobe'),
+        ('Zamfara', 'Zamfara'),
+        ('FCT', 'FCT'),
+    ]
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    country = models.CharField(max_length=50, choices=COUNTRY_CHOICES, default='Nigeria')
+    state = models.CharField(max_length=50, choices=STATE_CHOICES)
+    city = models.CharField(max_length=100)
+    street_address = models.TextField()
+    postal_code = models.CharField(max_length=20, blank=True, null=True)
+    phone_number = models.CharField(max_length=15)
+    is_default = models.BooleanField(default=False)
+    address_type = models.CharField(max_length=10, choices=ADDRESS_TYPE_CHOICES, default='home')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+    def __str__(self):
+        return f"{self.street_address}, {self.city}, {self.state}"
+
+    def save(self, *args, **kwargs):
+        if self.is_default:
+            # Set all other addresses of the user to non-default
+            UserAddress.objects.filter(user=self.user, is_default=True).update(is_default=False)
+        elif not self.is_default and not UserAddress.objects.filter(user=self.user, is_default=True).exists():
+            # If this address is not default, and the user doesn't have any default address, make this one default
+            self.is_default = True
+
+        super().save(*args, **kwargs)
 
 
 
@@ -132,6 +207,10 @@ class Cart(models.Model):
                 else:
                     raise ValueError("Not enough stock available!")
                 
+    def __str__(self):
+        return self.user.username
+        
+                
      
         
 
@@ -147,3 +226,77 @@ class CartItem(models.Model):
 
     def __str__(self):
         return f"{self.quantity} of {self.product.name}"
+    
+
+
+class Order(models.Model):
+    DELIVERY_STATUS_CHOICES = [
+        ('Pending', 'Pending'),
+        ('Processing', 'Processing'),
+        ('Shipped', 'Shipped'),
+        ('Delivered', 'Delivered'),
+        ('Cancelled', 'Cancelled'),
+    ]
+    user = models.ForeignKey('User', on_delete=models.CASCADE)
+    reference = models.CharField(max_length=100, unique=True)  
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(max_length=20, default="pending")
+    delivery_status = models.CharField(max_length=20, choices=DELIVERY_STATUS_CHOICES, default='Pending')
+    address = models.ForeignKey(UserAddress, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    delivered_date = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return self.user.username
+    
+    def save(self, *args, **kwargs):
+        if self.delivery_status == 'Delivered' and not self.delivered_date:
+            self.delivered_date = now()  
+        super().save(*args, **kwargs)
+    
+
+class OrderItem(models.Model):
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='orders')
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    quantity = models.PositiveIntegerField()
+    size = models.CharField(max_length=10, blank=True, null=True)
+
+    def get_total_price(self):
+        return self.quantity * self.product.discounted_price
+    
+    def __str__(self):
+        return self.order.user.username
+    
+
+
+
+
+
+class WishList(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.user.username
+    
+
+class WishListItem(models.Model):
+    wishlist = models.ForeignKey(WishList, related_name='items', on_delete=models.CASCADE)
+    product = models.ForeignKey(Product, related_name='wishlist_items', on_delete=models.CASCADE)
+    size = models.CharField(max_length=20)
+
+    def __str__(self):
+        return f"{self.product.name} - {self.size if self.size else 'No Size'}"
+
+
+
+class Review(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    order_item = models.OneToOneField(OrderItem, on_delete=models.CASCADE, related_name="review")
+    title = models.CharField(max_length=100)
+    rating = models.PositiveIntegerField()
+    review = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.user.username

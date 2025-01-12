@@ -1,8 +1,9 @@
 from rest_framework import serializers
-from .models import User,Category,Product,CartItem,Cart,ProductSize
+from .models import User,Category,Product,CartItem,Cart,ProductSize,Order,OrderItem,UserAddress,WishList,WishListItem,Review
 from django.contrib.auth.password_validation import validate_password,ValidationError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import AccessToken,RefreshToken
+from django.db.models import Sum
 
 
 
@@ -24,10 +25,28 @@ class CustomTokenRefreshSerializer(TokenRefreshSerializer):
         return data
     
 
+class PasswordResetSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    password = serializers.CharField(write_only=True, min_length=8)
+
+    def validate_password(self, value):
+        try:
+            validate_password(value)
+        except ValidationError as e:
+            raise serializers.ValidationError(e.messages)
+        return value
+    
+
+
+
 class UserSerializer(serializers.ModelSerializer):
+    total_purchase = serializers.SerializerMethodField()
+    # total_revenue = serializers.SerializerMethodField()
     class Meta:
         model = User
-        fields = ('id', 'username', 'password','email')
+        fields = ('id','first_name', 'last_name', 'username', 'password','email','is_active','date_joined','total_purchase')
         extra_kwargs = {'password': {'write_only': True}}
 
     def create(self, validated_data):
@@ -45,6 +64,16 @@ class UserSerializer(serializers.ModelSerializer):
         except ValidationError as e:
             raise serializers.ValidationError(e.messages)
         return value
+    
+    def get_total_purchase(self, obj):
+        # Calculate total purchase for a specific user
+        total = Order.objects.filter(user=obj).aggregate(Sum('total_amount'))['total_amount__sum']
+        return total if total is not None else 0
+    
+    # def get_total_revenue(self, obj):
+    #     # Calculate total revenue for all users
+    #     total_revenue = Order.objects.aggregate(Sum('total_amount'))['total_amount__sum']
+    #     return total_revenue if total_revenue is not None else 0
 
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -64,6 +93,7 @@ class ProductSizeSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductSize
         fields = [ 'size', 'quantity']
+        
 
 class ProductSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
@@ -87,6 +117,27 @@ class ProductSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"sizes": "This field is required for sized products."})
 
         return product
+    
+    def update(self, instance, validated_data):
+        # Extract and handle sizes data
+        sizes_data = validated_data.pop('sizes', None)
+
+        # Update the main product fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # Handle updates for `sizes`
+        if instance.product_type == 'sized':
+            if sizes_data is None:
+                raise serializers.ValidationError({"sizes": "This field is required for sized products."})
+            
+            # Clear existing sizes and recreate them
+            instance.sizes.all().delete()  # Assuming related_name='sizes' in ProductSize
+            for size_data in sizes_data:
+                ProductSize.objects.create(product=instance, **size_data)
+
+        return instance
 
 
 
@@ -118,21 +169,77 @@ class CartSerializer(serializers.ModelSerializer):
 
 
 
-
-# class CartItemSerializer(serializers.ModelSerializer):
-#     product_name = serializers.ReadOnlyField(source='product.name')
-#     price = serializers.ReadOnlyField(source='product.price')
-
-#     class Meta:
-#         model = CartItem
-#         fields = ['id', 'product', 'product_name', 'price', 'quantity']
-
-# class CartSerializer(serializers.ModelSerializer):
-#     items = CartItemSerializer(many=True)
-
-#     class Meta:
-#         model = Cart
-#         fields = ['id', 'items']
+class OrderItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source="product.name", read_only=True)
+    price = serializers.CharField(source='product.discounted_price',read_only=True) 
+    product_image = serializers.ImageField(source='product.image')
+    reference = serializers.CharField(source='order.reference')
+    delivered_date = serializers.CharField(source='order.delivered_date')
+    total_price = serializers.SerializerMethodField()
 
 
+    class Meta:
+        model = OrderItem
+        fields = '__all__'
 
+    def get_total_price(self, obj):
+        return obj.get_total_price()
+
+
+class AddressSerializer(serializers.ModelSerializer):
+    email = serializers.CharField(source="user.email", read_only=True)
+    class Meta:
+        model = UserAddress
+        fields = '__all__'
+        read_only_fields = ('user','created_at')
+
+
+
+
+class OrderSerializer(serializers.ModelSerializer):
+    orders = OrderItemSerializer(many=True, read_only=True)
+    username = serializers.CharField(source="user.username", read_only=True)
+    email = serializers.EmailField(source="user.email", read_only=True)
+    address = AddressSerializer()
+
+    class Meta:
+        model = Order
+        fields = ["id", "username","email", "reference", "status","delivery_status", "total_amount",'address', "created_at", "orders"]
+
+        
+
+
+
+
+
+
+
+class WishListItemSerializer(serializers.ModelSerializer):
+    product = ProductSerializer(read_only=True)
+    size = serializers.CharField()
+
+    class Meta:
+        model = WishListItem
+        fields = ['product', 'size']
+
+
+class WishListSerializer(serializers.ModelSerializer):
+    items = WishListItemSerializer(many=True)
+
+    class Meta:
+        model = WishList
+        fields = ['items']
+
+class ReviewSerializer(serializers.ModelSerializer):
+    user = serializers.CharField(source="user.username", read_only=True)
+    product = serializers.CharField(source="product.name", read_only=True)
+
+    class Meta:
+        model = Review
+        exclude = ('order_item',)
+        read_only_fields = ['user', 'created_at',"product"]
+
+class MonthlyOrderSerializer(serializers.Serializer):
+    month = serializers.CharField()
+    total_orders = serializers.IntegerField()
+    total_amount = serializers.DecimalField(max_digits=10, decimal_places=2)

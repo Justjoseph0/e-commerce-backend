@@ -23,6 +23,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-g=m99lv+vyf_8pm@hl9ijw+)b&i4$zq6_5oo7sno0)6hu5&dj^'
 
+
+
+PAYSTACK_SECRET_KEY = "sk_test_903e42339453525d37e8756380380f5efac67c47"
+PAYSTACK_PUBLIC_KEY = "pk_test_086d6d7873611346ccc8c8980988aa9d608da45f"
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
@@ -31,9 +36,19 @@ ALLOWED_HOSTS = []
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    'https://e-commerce-navy-nine.vercel.app'
 ]
 
-CORS_ALLOW_CREDENTIALS = True
+
+# CSRF_TRUSTED_ORIGINS = [
+#     "http://localhost:5173",  # For local development
+#     "https://e-commerce-navy-nine.vercel.app",  
+# ]
+
+
+CORS_ALLOW_ALL_ORIGINS = True
+
+# CORS_ALLOW_CREDENTIALS = True
 
 
 
@@ -50,7 +65,8 @@ SIMPLE_JWT = {
 
 
 # time before the link send expires it in seconds
-PASSWORD_RESET_TIMEOUT = 300
+# PASSWORD_RESET_TIMEOUT = 300
+PASSWORD_RESET_TIMEOUT = 86400
 
 
 # Application definition
@@ -192,5 +208,8 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'wurldblog@gmail.com'  # Your Gmail address
-EMAIL_HOST_PASSWORD = 'hbjiojwptpeetxlc' 
+EMAIL_HOST_USER = 'wurldblog@gmail.com' 
+EMAIL_HOST_PASSWORD = 'iishpcfhdpivovsw' 
+
+
+
