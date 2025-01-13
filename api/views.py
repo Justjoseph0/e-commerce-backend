@@ -909,8 +909,10 @@ class PendingReviewsView(APIView):
             if (item.product.id, item.size) not in reviewed_combinations
         ]
 
-        serializer = OrderItemSerializer(pending_items, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        paginator = OrderPagination()
+        paginated_pendingReview = paginator.paginate_queryset(pending_items, request, view=self)
+        serializer = OrderItemSerializer(paginated_pendingReview, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
 class PendingReviewDetailView(APIView):
