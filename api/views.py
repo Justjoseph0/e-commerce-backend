@@ -803,6 +803,7 @@ class MonthlyOrdersAPIView(APIView):
 
 class ProductReviewApiView(APIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = ReviewSerializer
 
     def get_object(self, product_id):
         return get_object_or_404(Product, pk=product_id)
@@ -810,48 +811,79 @@ class ProductReviewApiView(APIView):
     def post(self, request, product_id):
         product = self.get_object(product_id)
         reference = request.data.get("reference")
-        size = request.data.get("size", None)
+        size = request.data.get("size")
 
-        # Validate reference
         if not reference:
             return Response(
                 {"error": "Reference is required to review the product."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-    
-        try:
-            order_item = OrderItem.objects.get(
-                order__reference=reference,
-                order__user=request.user,
-                order__status="success",
-                order__delivery_status="Delivered",
-                product=product,
-            )
-        except OrderItem.DoesNotExist:
+        
+        order_items = OrderItem.objects.filter(
+            order__reference=reference,
+            order__user=request.user,
+            order__status="success",
+            order__delivery_status="Delivered",
+            product=product
+        )
+
+        if not order_items.exists():
             return Response(
                 {"error": "You can only review products you have successfully purchased and that have been delivered."},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Check if the specific OrderItem has already been reviewed
-        if Review.objects.filter(order_item=order_item).exists():
+        # Check if this is a sized product
+        first_item = order_items.first()
+        is_sized_product = first_item.size is not None
+
+        if is_sized_product:
+            if not size:
+                return Response(
+                    {"error": "Size is required for this product."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # , filter by the specific size
+            order_item = order_items.filter(size=size).first()
+            if not order_item:
+                return Response(
+                    {"error": f"You haven't purchased this product in size {size}."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        else:
+            # For non-sized products
+            order_item = first_item
+            size = None 
+
+        # Check for existing review
+        existing_review = Review.objects.filter(
+            user=request.user,
+            product=product,
+            size=size
+        ).exists()
+
+        if existing_review:
             return Response(
-                {"error": "You have already reviewed this specific order."},
+                {"error": "You have already reviewed this product" + (f" in size {size}" if size else "") + "."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        
+        # Create the review
         serializer = ReviewSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save(user=request.user, product=product, order_item=order_item)
+            serializer.save(
+                user=request.user,
+                product=product,
+                order_item=order_item,
+                size=size
+            )
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-
-    
 
 class PendingReviewsView(APIView):
     permission_classes = [IsAuthenticated]
@@ -859,55 +891,92 @@ class PendingReviewsView(APIView):
     def get(self, request):
         user = request.user
 
-        # Fetch all delivered order items for the user
+        
         delivered_items = OrderItem.objects.filter(
             order__user=user,
             order__status="success",
             order__delivery_status="Delivered"
         )
 
-        # Get a list of products the user has already reviewed
-        reviewed_products = Review.objects.filter(user=user).values_list('product', flat=True)
+        reviewed_items = Review.objects.filter(user=user).values('product', 'size')
 
-        # Filter order items to include only those not yet reviewed
-        pending_items = delivered_items.exclude(product__id__in=reviewed_products)
+        
+        reviewed_combinations = {(review['product'], review['size']) for review in reviewed_items}
 
-       
+      
+        pending_items = [
+            item for item in delivered_items
+            if (item.product.id, item.size) not in reviewed_combinations
+        ]
+
         serializer = OrderItemSerializer(pending_items, many=True)
-
         return Response(serializer.data, status=status.HTTP_200_OK)
-
 
 
 class PendingReviewDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, reference):
+    def get(self, request, product_id):
         user = request.user
         size = request.query_params.get("size", None)
+        reference = request.query_params.get("reference", None)
 
         try:
-            order_item = OrderItem.objects.get(
+            order_items = OrderItem.objects.filter(
                 order__reference=reference,
-                size=size,  
+                product_id=product_id,
                 order__user=user,
                 order__status="success",
                 order__delivery_status="Delivered"
             )
-        except OrderItem.DoesNotExist:
+            
+            if not order_items.exists():
+                return Response(
+                    {"error": "Order item not found or not eligible for review."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+        
+            first_item = order_items.first()
+            is_sized_product = first_item.size is not None
+
+            if is_sized_product:
+                if not size:
+                    return Response(
+                        {"error": "Size parameter is required for this product."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                order_item = order_items.filter(size=size).first()
+                if not order_item:
+                    return Response(
+                        {"error": f"No order item found with size {size}."},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+            else:
+                order_item = first_item
+                size = None
+
+            # Check for existing review
+            existing_review = Review.objects.filter(
+                product_id=product_id,
+                user=user,
+                size=size
+            ).exists()
+
+            if existing_review:
+                return Response(
+                    {"error": "You have already reviewed this product" + 
+                             (f" in size {size}" if size else "") + "."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            serializer = OrderItemSerializer(order_item)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        except Exception as e:
             return Response(
-                {"error": "Order item not found or not eligible for review."},
-                status=status.HTTP_404_NOT_FOUND
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-        # Check if the product has already been reviewed
-        if Review.objects.filter(product=order_item.product, user=user).exists():
-            return Response(
-                {"error": "You have already reviewed this product."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        serializer = OrderItemSerializer(order_item)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
 

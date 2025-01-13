@@ -72,6 +72,6 @@ urlpatterns = [
     # reviews
     path('product/<int:product_id>/reviews/', ProductReviewApiView.as_view(), name='product-review'),
     path('order/pending_review/', PendingReviewsView.as_view(),name="pending-review"),
-     path('order/pending/<str:reference>/', PendingReviewDetailView.as_view(), name='pending-review-detail'),
+     path('order/pending/<int:product_id>/', PendingReviewDetailView.as_view(), name='pending-review-detail'),
 
 ]

@@ -293,9 +293,11 @@ class Review(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     order_item = models.OneToOneField(OrderItem, on_delete=models.CASCADE, related_name="review")
+    name = models.CharField(max_length=50, blank=True, null=True)
     title = models.CharField(max_length=100)
     rating = models.PositiveIntegerField()
     review = models.TextField()
+    size = models.CharField(max_length=10, blank=True,null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
