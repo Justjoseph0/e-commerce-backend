@@ -4,6 +4,7 @@ from django.utils.translation import gettext_lazy as _
 from autoslug import AutoSlugField
 from django.core.validators import FileExtensionValidator
 from django.utils.timezone import now
+from cloudinary.models import CloudinaryField
 
 
 
@@ -118,7 +119,7 @@ class Product(models.Model):
     description = models.TextField()
     price = models.DecimalField(max_digits=10, decimal_places=2)
     discounted_price = models.DecimalField(max_digits=10, decimal_places=2)
-    image = models.ImageField(upload_to='products/',validators=[FileExtensionValidator(['png', 'jpg'])],null=True,blank=True)
+    image = CloudinaryField('image', null=True, blank=True) 
     product_type = models.CharField(max_length=10, choices=PRODUCT_TYPE_CHOICES, default='sized')
     is_available = models.BooleanField(default=True)
     quantity = models.PositiveIntegerField(default=0)
