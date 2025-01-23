@@ -13,7 +13,7 @@ def send_activation_email(user, request):
     uid = urlsafe_base64_encode(force_bytes(user.pk))
     
   
-    frontend_url = "http://localhost:5173"  
+    frontend_url = "https://e-commerce-navy-nine.vercel.app"  
     
     # activation URL for frontend 
     activation_link = f"{frontend_url}/activate/{uid}/{token}/"
