@@ -45,7 +45,7 @@ PAYSTACK_SECRET_KEY = os.getenv('PAYSTACK_SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['e-commerce-backend-8l38.onrender.com', 'localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['onowu.pythonanywhere.com', 'localhost', '127.0.0.1']
 
 
 CORS_ALLOWED_ORIGINS = [
@@ -57,7 +57,7 @@ CORS_ALLOWED_ORIGINS = [
 
 # CSRF_TRUSTED_ORIGINS = [
 #     "http://localhost:5173",  # For local development
-#     "https://e-commerce-navy-nine.vercel.app",  
+#     "https://e-commerce-navy-nine.vercel.app",
 # ]
 
 
@@ -210,8 +210,8 @@ AUTH_USER_MODEL = 'api.User'
 
 # allow login with email
 AUTHENTICATION_BACKENDS = [
-    'api.backends.EmailBackend', 
-    'django.contrib.auth.backends.ModelBackend',  
+    'api.backends.EmailBackend',
+    'django.contrib.auth.backends.ModelBackend',
 ]
 
 
